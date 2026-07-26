@@ -112,3 +112,60 @@ then run `uv add pageindex` (or `uv sync` after the manual edit) so `uv.lock` is
 
 **Status: implemented.** The notebook, dependency, and lockfile update described above have already
 been created/applied in this repo (this file is kept as a record of the plan that was followed).
+
+---
+
+# Notes: Claude Code Agents (what they are / why use them)
+
+## What they are
+
+"Agents" in Claude Code is a different concept from the LangChain agents built in this repo's
+notebooks (`1-langchainintro.ipynb`) — it's the CLI tool's own mechanism for spinning up isolated
+Claude sessions to handle sub-tasks:
+
+- **Subagents (the `Agent` tool)** — a worker Claude launched *from within* the current session to do
+  a bounded task in its own context window, then reports back only a summary. Built-in types
+  available in this repo's session: `code-reviewer`, `Explore` (read-only search), `general-purpose`,
+  `Plan`, `claude-code-guide`, `statusline-setup`.
+- **Custom agents** — defined as markdown files under `.claude/agents/*.md` with frontmatter
+  (`name`, `description`, tool restrictions, optional model override) and a system prompt, letting a
+  project define its own specialized agent types beyond the built-ins.
+
+## Why use them
+
+- **Protects the main context window.** Grepping across a repo, reading docs, or exploring an
+  unfamiliar codebase produces a lot of noise. A subagent absorbs that noise and hands back only
+  what matters, instead of filling up the primary conversation.
+- **Parallelism.** Multiple independent subagents can run concurrently in one message (e.g. "review
+  this PR" + "research this library" at the same time); `isolation: "worktree"` gives each one its
+  own git worktree so file edits never collide.
+- **Specialization + reduced blast radius.** Task-specific tool access — e.g. `Explore` only gets
+  read-only tools — so a research task literally can't accidentally edit files.
+- **Background execution.** Long tasks run in the background by default; you get a notification when
+  done instead of the session blocking on them.
+
+## Caveats
+
+- A fresh subagent has **no memory** of the parent conversation — its prompt must be self-contained
+  (file paths, context, what's already been tried), since it starts cold.
+- Each agent has its own context window, so running several in parallel **multiplies token usage** —
+  not worth it for trivial one-off lookups.
+- There's spawn latency, so reserve agents for tasks actually worth isolating rather than every small
+  step.
+
+## How this applies to this project
+
+Useful here for things like: reviewing a notebook for correctness (`code-reviewer` agent), searching
+across all `updatedlangchain/*.ipynb` notebooks for a pattern (`Explore` agent), or running a
+long-running polling/API task — such as the PageIndex submit-and-poll loop described in the
+Vectorless RAG plan above — in the background while continuing other work in the main session.
+
+
+## Built-in agent types available in claude code:
+- claude — catch-all default agent
+- claude-code-guide — answers questions about Claude Code, Agent SDK, Claude API
+- code-reviewer — security/quality code review (Read, Grep, Glob only)
+- Explore — fast read-only codebase search
+- general-purpose — multi-step research/tasks, full tool access
+- Plan — designs implementation plans
+- statusline-setup — configures the status line
